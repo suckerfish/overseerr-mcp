@@ -1,10 +1,6 @@
 services:
   overseerr-mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: overseerr-mcp:latest
-    pull_policy: build
+    image: ghcr.io/suckerfish/overseerr-mcp:latest
     container_name: overseerr-mcp
     environment:
       - OVERSEERR_URL=${OVERSEERR_URL}
