@@ -1,0 +1,23 @@
+services:
+  overseerr-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: overseerr-mcp:latest
+    pull_policy: build
+    container_name: overseerr-mcp
+    environment:
+      - OVERSEERR_URL=${OVERSEERR_URL}
+      - OVERSEERR_API_KEY=${OVERSEERR_API_KEY}
+      - PORT=${PORT:-8080}
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
