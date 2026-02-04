@@ -18,10 +18,17 @@ MCP server for [Overseerr](https://overseerr.dev/) media request management. Ena
 
 ## Installation
 
+### Docker (recommended)
+
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd plexrequest_mcp
+docker pull ghcr.io/suckerfish/overseerr-mcp:latest
+```
+
+### From source
+
+```bash
+git clone https://github.com/suckerfish/overseerr-mcp.git
+cd overseerr-mcp
 
 # Create virtual environment and install dependencies
 uv venv && uv pip install -e .
@@ -54,8 +61,18 @@ uv run python -m src.server --transport streamable-http --host 0.0.0.0 --port 80
 
 ### Docker
 
+Pre-built images are available for `linux/amd64` and `linux/arm64`.
+
 ```bash
+# Using docker compose (recommended)
 docker compose up -d
+
+# Or run directly
+docker run -d \
+  -e OVERSEERR_URL=http://your-overseerr:5055 \
+  -e OVERSEERR_API_KEY=your-api-key \
+  -p 8080:8080 \
+  ghcr.io/suckerfish/overseerr-mcp:latest
 ```
 
 ## MCP Tools
