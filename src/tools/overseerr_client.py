@@ -10,10 +10,12 @@ from urllib.parse import quote
 from ..models.overseerr import (
     MediaType,
     RequestStatus,
+    MediaStatus,
     MediaSearchResult,
     MediaRequest,
     UserInfo,
     RequestResponse,
+    get_media_status_text,
 )
 
 
@@ -79,8 +81,8 @@ class OverseerrClient:
         query: str,
         page: int = 1,
         media_type: Optional[MediaType] = None,
-    ) -> list[MediaSearchResult]:
-        """Search for movies and TV shows."""
+    ) -> list[dict]:
+        """Search for movies and TV shows with availability status."""
         # URL encode query - Overseerr requires this for spaces/special chars
         params = {"query": quote(query, safe=""), "page": page}
 
@@ -97,7 +99,28 @@ class OverseerrClient:
                 continue
 
             try:
-                results.append(MediaSearchResult(**item))
+                parsed = MediaSearchResult(**item)
+
+                # Extract status from mediaInfo if present
+                media_info = item.get("mediaInfo")
+                status = MediaStatus.UNKNOWN
+                if media_info:
+                    status_val = media_info.get("status", 1)
+                    try:
+                        status = MediaStatus(status_val)
+                    except ValueError:
+                        status = MediaStatus.UNKNOWN
+
+                results.append({
+                    "id": parsed.id,
+                    "mediaType": parsed.mediaType,
+                    "title": parsed.display_title,
+                    "year": parsed.year,
+                    "overview": parsed.overview,
+                    "voteAverage": parsed.voteAverage,
+                    "status": status.value,
+                    "status_text": get_media_status_text(status),
+                })
             except ValidationError:
                 continue
 
@@ -255,3 +278,64 @@ class OverseerrClient:
     async def get_tv_details(self, tmdb_id: int) -> dict:
         """Get TV show details by TMDB ID."""
         return await self._request("GET", f"/tv/{tmdb_id}")
+
+    async def get_media_status(
+        self,
+        tmdb_id: int,
+        media_type: MediaType,
+    ) -> dict:
+        """Get availability status for a movie or TV show.
+
+        Args:
+            tmdb_id: TMDB ID of the media
+            media_type: Either MediaType.MOVIE or MediaType.TV
+
+        Returns:
+            Dict with status information
+        """
+        if media_type == MediaType.MOVIE:
+            data = await self._request("GET", f"/movie/{tmdb_id}")
+            title = data.get("title", "Unknown Movie")
+        else:
+            data = await self._request("GET", f"/tv/{tmdb_id}")
+            title = data.get("name", "Unknown TV Show")
+
+        media_info = data.get("mediaInfo")
+
+        # Default to UNKNOWN if no mediaInfo
+        status = MediaStatus.UNKNOWN
+        has_request = False
+        request_status = None
+
+        if media_info:
+            status_val = media_info.get("status", 1)
+            try:
+                status = MediaStatus(status_val)
+            except ValueError:
+                status = MediaStatus.UNKNOWN
+
+            requests = media_info.get("requests", [])
+            has_request = len(requests) > 0
+            if has_request and requests:
+                latest_request = requests[-1]
+                req_status = latest_request.get("status")
+                request_status_map = {1: "Pending", 2: "Approved", 3: "Declined"}
+                request_status = request_status_map.get(req_status, "Unknown")
+
+        result = {
+            "tmdb_id": tmdb_id,
+            "title": title,
+            "media_type": media_type.value,
+            "status": status.value,
+            "status_text": get_media_status_text(status),
+            "has_request": has_request,
+            "request_status": request_status,
+        }
+
+        # Add TV-specific info
+        if media_type == MediaType.TV:
+            seasons = data.get("seasons", [])
+            regular_seasons = [s for s in seasons if s.get("seasonNumber", 0) > 0]
+            result["seasons_count"] = len(regular_seasons)
+
+        return result

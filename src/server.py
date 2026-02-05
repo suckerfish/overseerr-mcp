@@ -56,7 +56,8 @@ async def search_media(
         media_type: Optional filter - "movie" or "tv"
 
     Returns:
-        List of matching movies/TV shows with TMDB IDs, titles, years, and ratings
+        List of matching movies/TV shows with TMDB IDs, titles, years, ratings,
+        and availability status
     """
     try:
         client = get_client()
@@ -72,12 +73,14 @@ async def search_media(
             "count": len(results),
             "results": [
                 {
-                    "tmdb_id": r.id,
-                    "title": r.display_title,
-                    "year": r.year,
-                    "type": r.mediaType.value,
-                    "overview": (r.overview[:200] + "...") if r.overview and len(r.overview) > 200 else r.overview,
-                    "rating": round(r.voteAverage, 1) if r.voteAverage else None,
+                    "tmdb_id": r["id"],
+                    "title": r["title"],
+                    "year": r["year"],
+                    "type": r["mediaType"].value,
+                    "overview": (r["overview"][:200] + "...") if r["overview"] and len(r["overview"]) > 200 else r["overview"],
+                    "rating": round(r["voteAverage"], 1) if r["voteAverage"] else None,
+                    "status": r["status"],
+                    "status_text": r["status_text"],
                 }
                 for r in results[:20]  # Limit to top 20
             ],
@@ -203,37 +206,142 @@ async def request_media(
     tmdb_id: int,
     media_type: str,
     seasons: Optional[str] = None,
+    confirm: bool = False,
 ) -> dict:
     """Request a movie or TV show to be added to Plex.
 
     Use search_media first to find the TMDB ID for the content you want.
 
+    By default, returns a preview showing title, metadata, and per-season availability
+    for TV shows. Set confirm=true to actually submit the request.
+
+    For TV shows with multiple seasons, you must specify which seasons to request.
+    Single-season shows are auto-selected.
+
     Args:
         tmdb_id: TMDB ID of the movie or TV show (from search results)
         media_type: "movie" or "tv"
-        seasons: For TV shows - comma-separated season numbers (e.g., "1,2,3") or omit for all seasons
+        seasons: For TV shows - comma-separated season numbers (e.g., "1,2,3") or "all"
+        confirm: Set to true to actually submit the request. Without this, returns a preview.
 
     Returns:
-        Request confirmation with status
+        Preview with title, overview, genres, rating, and season availability (TV),
+        or confirmation if confirm=true
     """
     try:
         client = get_client()
-
         mt = MediaType(media_type.lower())
 
+        # Fetch media details for preview/confirmation
+        if mt == MediaType.MOVIE:
+            details = await client.get_movie_details(tmdb_id)
+            title = details.get("title", "Unknown")
+            year = str(details.get("releaseDate", ""))[:4] or None
+        else:
+            details = await client.get_tv_details(tmdb_id)
+            title = details.get("name", "Unknown")
+            year = str(details.get("firstAirDate", ""))[:4] or None
+
+        # Extract common metadata
+        tagline = details.get("tagline")
+        overview = details.get("overview", "")
+        if overview and len(overview) > 200:
+            overview = overview[:200] + "..."
+        genres = [g.get("name") for g in details.get("genres", [])]
+        rating = round(details.get("voteAverage", 0), 1) or None
+
+        # For TV shows, extract per-season status
+        season_details = []
+        if mt == MediaType.TV:
+            media_info = details.get("mediaInfo", {})
+            season_statuses = {s.get("seasonNumber"): s.get("status", 1) for s in media_info.get("seasons", [])}
+
+            for s in details.get("seasons", []):
+                season_num = s.get("seasonNumber", 0)
+                if season_num == 0:  # Skip specials
+                    continue
+                status_code = season_statuses.get(season_num, 1)
+                status_map = {1: "Not Requested", 2: "Requested", 3: "Processing", 4: "Partially Available", 5: "Available"}
+                season_details.append({
+                    "season": season_num,
+                    "episodes": s.get("episodeCount", 0),
+                    "status": status_map.get(status_code, "Unknown"),
+                })
+
+        # Preview mode - return details without requesting
+        if not confirm:
+            preview = {
+                "preview": True,
+                "tmdb_id": tmdb_id,
+                "title": title,
+                "year": year,
+                "type": mt.value,
+                "tagline": tagline,
+                "overview": overview,
+                "genres": genres,
+                "rating": rating,
+            }
+
+            if mt == MediaType.TV:
+                preview["seasons"] = season_details
+                if seasons:
+                    preview["selected_seasons"] = seasons
+                    preview["message"] = "Call again with confirm=true to submit this request"
+                elif len(season_details) == 1:
+                    # Single season show - auto-select
+                    preview["selected_seasons"] = str(season_details[0]["season"])
+                    preview["message"] = "Call again with confirm=true to request season 1"
+                else:
+                    # Multi-season show - require selection
+                    not_requested = [s["season"] for s in season_details if s["status"] == "Not Requested"]
+                    if not_requested:
+                        preview["message"] = f"Specify seasons to request (e.g., seasons=\"{','.join(map(str, not_requested[:3]))}\" or seasons=\"all\")"
+                    else:
+                        preview["message"] = "All seasons already requested/available. Specify seasons parameter to re-request specific seasons."
+            else:
+                preview["message"] = "Call again with confirm=true to submit this request"
+
+            return preview
+
+        # Confirmed - submit the request
         season_list = None
-        if seasons and mt == MediaType.TV:
-            season_list = [int(s.strip()) for s in seasons.split(",")]
+        seasons_requested = None
+
+        if mt == MediaType.TV:
+            if seasons and seasons.lower() == "all":
+                # Explicitly requesting all seasons
+                season_list = None  # Client defaults to "all"
+                seasons_requested = "all"
+            elif seasons:
+                # Specific seasons requested
+                season_list = [int(s.strip()) for s in seasons.split(",")]
+                seasons_requested = seasons
+            elif len(season_details) == 1:
+                # Single season show - auto-select
+                season_list = [season_details[0]["season"]]
+                seasons_requested = str(season_details[0]["season"])
+            else:
+                # Multi-season show with no selection - reject
+                raise ToolError(
+                    f"This show has {len(season_details)} seasons. "
+                    "Please specify which seasons to request (e.g., seasons=\"1,2\" or seasons=\"all\")"
+                )
 
         result = await client.request_media(mt, tmdb_id, seasons=season_list)
 
-        return {
+        response = {
             "success": True,
             "request_id": result.id,
-            "status": result.status.name,
+            "title": title,
+            "year": year,
             "type": result.type.value,
-            "message": f"Request created successfully (ID: {result.id})",
+            "status": result.status.name,
+            "message": f"Request created for '{title}' (ID: {result.id})",
         }
+        if seasons_requested:
+            response["seasons_requested"] = seasons_requested
+
+        return response
     except OverseerrError as e:
         raise ToolError(f"Request failed: {str(e)}")
     except ValueError as e:
@@ -272,6 +380,43 @@ async def health_check() -> dict:
             "status": "error",
             "error": str(e),
         }
+
+
+@mcp.tool()
+async def get_media_status(
+    tmdb_id: int,
+    media_type: str,
+) -> dict:
+    """Check the availability status of a movie or TV show.
+
+    Use search_media first to find the TMDB ID, then check its detailed status.
+    Returns whether media is available, being processed, or needs to be requested.
+
+    Args:
+        tmdb_id: TMDB ID of the movie or TV show (from search results)
+        media_type: "movie" or "tv"
+
+    Returns:
+        Status information including:
+        - status: Numeric status code (1=Unknown, 2=Requested, 3=Processing, 4=Partially Available, 5=Available)
+        - status_text: Human-readable status like "Available" or "Processing"
+        - has_request: Whether any request exists for this media
+        - request_status: Status of existing request ("Pending", "Approved", "Declined")
+        - seasons_count: (TV only) Total number of seasons
+    """
+    try:
+        client = get_client()
+        mt = MediaType(media_type.lower())
+
+        result = await client.get_media_status(tmdb_id, mt)
+        return result
+
+    except OverseerrError as e:
+        raise ToolError(f"Status check failed: {str(e)}")
+    except ValueError as e:
+        raise ToolError(f"Invalid input: {str(e)}")
+    except Exception as e:
+        raise ToolError(f"Unexpected error: {str(e)}")
 
 
 def main():

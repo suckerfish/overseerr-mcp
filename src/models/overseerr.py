@@ -28,6 +28,18 @@ class MediaStatus(int, Enum):
     AVAILABLE = 5
 
 
+def get_media_status_text(status: MediaStatus) -> str:
+    """Get human-readable text for media status."""
+    status_map = {
+        MediaStatus.UNKNOWN: "Not Requested",
+        MediaStatus.PENDING: "Requested",
+        MediaStatus.PROCESSING: "Processing",
+        MediaStatus.PARTIALLY_AVAILABLE: "Partially Available",
+        MediaStatus.AVAILABLE: "Available",
+    }
+    return status_map.get(status, "Unknown")
+
+
 class UserInfo(BaseModel):
     """User information."""
     model_config = ConfigDict(populate_by_name=True)
