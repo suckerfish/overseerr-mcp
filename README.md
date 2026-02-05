@@ -4,10 +4,11 @@ MCP server for [Overseerr](https://overseerr.dev/) media request management. Ena
 
 ## Features
 
-- **Search media** - Find movies and TV shows by title
-- **View requests** - List requests with user info, filter by time period or status
+- **Search media** - Find movies and TV shows by title with availability status
+- **Media status** - Check if content is available, processing, or needs to be requested
+- **View requests** - List requests with user info, filter by approval status, availability status, or time period
 - **User management** - List users and view individual request histories
-- **Request media** - Submit new movie/TV requests
+- **Request media** - Submit new requests with preview confirmation and per-season selection for TV shows
 - **User correlation** - Easily answer questions like "list all requests from the last week and who requested them"
 
 ## Requirements
@@ -79,22 +80,26 @@ docker run -d \
 
 | Tool | Description |
 |------|-------------|
-| `search_media` | Search for movies/TV shows by title. Returns TMDB IDs needed for requests. |
-| `get_requests` | List media requests with user info. Filter by `status` (pending/approved/declined) or `days` (last N days). |
+| `search_media` | Search for movies/TV shows by title. Returns TMDB IDs, ratings, and availability status. |
+| `get_media_status` | Check detailed availability status for a specific TMDB ID. Shows request status, media availability, and season count for TV. |
+| `get_requests` | List media requests with user info. Filter by `status` (pending/approved), `media_status` (available/processing/unavailable/failed), or `days`. Use `show_all=true` to get all matches instead of the default 20. |
 | `get_users` | List all Overseerr users with request counts. |
 | `get_user_requests` | Get all requests for a specific user by ID. |
-| `request_media` | Submit a new media request using TMDB ID from search results. |
+| `request_media` | Request media with preview confirmation. Shows title, overview, genres, rating before confirming. TV shows require season selection. |
 | `health_check` | Check Overseerr server connectivity and version. |
 
 ## Example Queries
 
 Once connected to an MCP client, you can ask:
 
-- "Search for The Matrix"
+- "Search for The Matrix" - shows availability status inline
+- "Is Breaking Bad available?" - checks media status
 - "List all requests from the last week and who requested them"
 - "Show me all pending requests"
+- "What requests are still processing?" - filters by media availability
 - "What has user ID 5 requested?"
-- "Request the movie with TMDB ID 603"
+- "Request the movie The Matrix" - shows preview, requires confirmation
+- "Request seasons 1-3 of Breaking Bad" - per-season TV requests
 
 ## MCP Client Configuration
 

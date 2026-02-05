@@ -146,19 +146,27 @@ class OverseerrClient:
 
     async def get_requests(
         self,
-        status: Optional[RequestStatus] = None,
+        filter_by: Optional[str] = None,
         take: int = 50,
         skip: int = 0,
         sort_by: str = "added",
     ) -> list[MediaRequest]:
-        """Get media requests with optional filtering."""
+        """Get media requests with optional filtering.
+
+        Args:
+            filter_by: API filter - "all", "approved", "available", "pending",
+                      "processing", "unavailable", or "failed"
+            take: Number of results to return
+            skip: Number of results to skip (for pagination)
+            sort_by: Sort order
+        """
         params = {
             "take": take,
             "skip": skip,
             "sort": sort_by,
         }
-        if status:
-            params["filter"] = status.value
+        if filter_by:
+            params["filter"] = filter_by
 
         data = await self._request("GET", "/request", params=params)
 
@@ -174,12 +182,19 @@ class OverseerrClient:
 
     async def get_requests_with_media_info(
         self,
-        status: Optional[RequestStatus] = None,
+        filter_by: Optional[str] = None,
         since: Optional[datetime] = None,
         take: int = 50,
     ) -> list[dict]:
-        """Get requests with full media titles resolved."""
-        requests = await self.get_requests(status=status, take=take)
+        """Get requests with full media titles resolved.
+
+        Args:
+            filter_by: API filter - "all", "approved", "available", "pending",
+                      "processing", "unavailable", or "failed"
+            since: Only include requests after this datetime
+            take: Number of results to return
+        """
+        requests = await self.get_requests(filter_by=filter_by, take=take)
 
         enriched = []
         for req in requests:

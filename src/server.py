@@ -96,7 +96,8 @@ async def get_requests(
     status: Optional[str] = None,
     media_status: Optional[str] = None,
     days: Optional[int] = None,
-    limit: int = 50,
+    limit: int = 20,
+    show_all: bool = False,
 ) -> dict:
     """Get media requests with user information.
 
@@ -104,10 +105,11 @@ async def get_requests(
     Perfect for queries like "list all requests from the last week and who requested them".
 
     Args:
-        status: Filter by request approval status - "pending", "approved", or "declined"
-        media_status: Filter by availability - "available", "processing", "partially_available", "requested", or "not_requested"
+        status: Filter by request approval status - "pending" or "approved"
+        media_status: Filter by availability - "available", "processing", "unavailable", or "failed"
         days: Optional - only show requests from the last N days
-        limit: Maximum number of requests to return (default 50)
+        limit: Maximum number of requests to return (default 20)
+        show_all: Set to true to return all matching requests (ignores limit)
 
     Returns:
         List of requests with titles, requesters, request status, and media availability
@@ -115,43 +117,48 @@ async def get_requests(
     try:
         client = get_client()
 
-        status_filter = None
-        if status:
-            status_map = {
-                "pending": RequestStatus.PENDING,
-                "approved": RequestStatus.APPROVED,
-                "declined": RequestStatus.DECLINED,
-            }
-            status_filter = status_map.get(status.lower())
+        # Determine API filter - media_status takes priority (more specific)
+        # API supports: all, approved, available, pending, processing, unavailable, failed
+        api_filter = None
+        client_side_status_filter = None
+
+        if media_status:
+            media_status_lower = media_status.lower()
+            if media_status_lower in ("available", "processing", "unavailable", "failed"):
+                api_filter = media_status_lower
+            # If both filters specified, we'll filter request status client-side
+            if status:
+                client_side_status_filter = status.lower()
+        elif status:
+            status_lower = status.lower()
+            if status_lower in ("pending", "approved"):
+                api_filter = status_lower
 
         since = None
         if days:
             since = datetime.now() - timedelta(days=days)
 
+        take_count = 10000 if show_all else limit
+
         requests = await client.get_requests_with_media_info(
-            status=status_filter,
+            filter_by=api_filter,
             since=since,
-            take=limit,
+            take=take_count,
         )
 
-        # Client-side filter by media availability status
-        if media_status:
-            media_status_map = {
-                "available": "Available",
-                "processing": "Processing",
-                "partially_available": "Partially Available",
-                "requested": "Requested",
-                "not_requested": "Not Requested",
-            }
-            target_status = media_status_map.get(media_status.lower())
-            if target_status:
-                requests = [r for r in requests if r.get("media_status") == target_status]
+        # Client-side filter by request status if needed (when both filters specified)
+        if client_side_status_filter:
+            status_text_map = {"pending": "Pending", "approved": "Approved"}
+            target = status_text_map.get(client_side_status_filter)
+            if target:
+                requests = [r for r in requests if r.get("request_status") == target]
 
         return {
             "filter": {
                 "status": status,
                 "media_status": media_status,
                 "days": days,
+                "show_all": show_all,
             },
             "count": len(requests),
             "requests": requests,
