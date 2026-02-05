@@ -196,18 +196,30 @@ class OverseerrClient:
         """
         requests = await self.get_requests(filter_by=filter_by, take=take)
 
+        # Filter by date FIRST to reduce API calls for titles
+        if since:
+            since_time = since.replace(tzinfo=None) if since.tzinfo else since
+            filtered = []
+            for req in requests:
+                req_time = req.createdAt.replace(tzinfo=None) if req.createdAt.tzinfo else req.createdAt
+                if req_time >= since_time:
+                    filtered.append(req)
+            requests = filtered
+
+        # Now fetch titles only for filtered results
         enriched = []
         for req in requests:
-            # Filter by date if specified (handle timezone-aware comparison)
-            if since:
-                req_time = req.createdAt.replace(tzinfo=None) if req.createdAt.tzinfo else req.createdAt
-                since_time = since.replace(tzinfo=None) if since.tzinfo else since
-                if req_time < since_time:
-                    continue
-
-            # Try to get media title and availability status
             title = "Unknown"
+
+            # Get status from already-available data (no API call needed)
             media_status = "Unknown"
+            if req.media and req.media.status:
+                try:
+                    media_status = get_media_status_text(req.media.status)
+                except (ValueError, AttributeError):
+                    media_status = "Unknown"
+
+            # Fetch title (requires API call)
             if req.media and req.media.tmdbId:
                 try:
                     if req.type == MediaType.MOVIE:
@@ -216,14 +228,6 @@ class OverseerrClient:
                     else:
                         media_data = await self._request("GET", f"/tv/{req.media.tmdbId}")
                         title = media_data.get("name", "Unknown TV Show")
-
-                    # Extract availability status
-                    media_info = media_data.get("mediaInfo", {})
-                    status_code = media_info.get("status", 1)
-                    try:
-                        media_status = get_media_status_text(MediaStatus(status_code))
-                    except ValueError:
-                        media_status = "Unknown"
                 except OverseerrError:
                     pass
 
@@ -240,19 +244,71 @@ class OverseerrClient:
 
         return enriched
 
-    async def get_user_requests(self, user_id: int) -> list[dict]:
-        """Get all requests for a specific user."""
+    async def get_user_requests(
+        self,
+        user_id: int,
+        media_status_filter: Optional[str] = None,
+        limit: int = 20,
+    ) -> dict:
+        """Get all requests for a specific user.
+
+        Args:
+            user_id: The Overseerr user ID
+            media_status_filter: Filter results by media status - "Processing", "Available", etc.
+            limit: Maximum number of results to return after filtering
+        """
         # Get user info first
         user = await self.get_user(user_id)
 
-        # Get all requests and filter by user
-        all_requests = await self.get_requests(take=100)
-        user_requests = [r for r in all_requests if r.requestedBy and r.requestedBy.id == user_id]
+        # Fetch more than limit since we filter client-side by status
+        # If filtering by status, fetch more to ensure we get enough matches
+        fetch_count = limit * 50 if media_status_filter else limit * 5
+        fetch_count = min(fetch_count, 10000)  # Cap at 10k
 
+        # Use user-specific endpoint
+        data = await self._request("GET", f"/user/{user_id}/requests", params={"take": fetch_count})
+
+        user_requests = []
+        for item in data.get("results", []):
+            try:
+                user_requests.append(MediaRequest(**item))
+            except ValidationError:
+                continue
+
+        # Filter by status FIRST using data already in the request (no API calls needed)
+        # This dramatically reduces the number of title lookups needed
+        if media_status_filter:
+            status_code_map = {
+                "Not Requested": 1,
+                "Requested": 2,
+                "Processing": 3,
+                "Partially Available": 4,
+                "Available": 5,
+            }
+            target_code = status_code_map.get(media_status_filter)
+            if target_code:
+                user_requests = [
+                    r for r in user_requests
+                    if r.media and r.media.status and r.media.status.value == target_code
+                ]
+
+        # Apply limit BEFORE fetching titles to minimize API calls
+        user_requests = user_requests[:limit]
+
+        # Now fetch titles only for the limited, filtered results
         enriched = []
         for req in user_requests:
             title = "Unknown"
             media_status = "Unknown"
+
+            # Get status from already-available data
+            if req.media and req.media.status:
+                try:
+                    media_status = get_media_status_text(req.media.status)
+                except (ValueError, AttributeError):
+                    media_status = "Unknown"
+
+            # Fetch title (requires API call)
             if req.media and req.media.tmdbId:
                 try:
                     if req.type == MediaType.MOVIE:
@@ -261,14 +317,6 @@ class OverseerrClient:
                     else:
                         media_data = await self._request("GET", f"/tv/{req.media.tmdbId}")
                         title = media_data.get("name", "Unknown TV Show")
-
-                    # Extract availability status
-                    media_info = media_data.get("mediaInfo", {})
-                    status_code = media_info.get("status", 1)
-                    try:
-                        media_status = get_media_status_text(MediaStatus(status_code))
-                    except ValueError:
-                        media_status = "Unknown"
                 except OverseerrError:
                     pass
 

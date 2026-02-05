@@ -202,7 +202,12 @@ async def get_users() -> dict:
 
 
 @mcp.tool()
-async def get_user_requests(user_id: int) -> dict:
+async def get_user_requests(
+    user_id: int,
+    media_status: Optional[str] = None,
+    limit: int = 20,
+    show_all: bool = False,
+) -> dict:
     """Get all requests made by a specific user.
 
     Shows all media requests from a particular user.
@@ -210,13 +215,35 @@ async def get_user_requests(user_id: int) -> dict:
 
     Args:
         user_id: The Overseerr user ID
+        media_status: Filter by availability - "processing", "available", or "partially_available"
+        limit: Maximum number of requests to return (default 20)
+        show_all: Set to true to return all matching requests (ignores limit)
 
     Returns:
-        User info and their request history
+        User info and their request history filtered by media status
     """
     try:
         client = get_client()
-        result = await client.get_user_requests(user_id)
+
+        # Map input to display text used in results
+        status_filter = None
+        if media_status:
+            status_map = {
+                "processing": "Processing",
+                "available": "Available",
+                "partially_available": "Partially Available",
+                "requested": "Requested",
+                "not_requested": "Not Requested",
+            }
+            status_filter = status_map.get(media_status.lower())
+
+        take_count = 10000 if show_all else limit
+
+        result = await client.get_user_requests(
+            user_id,
+            media_status_filter=status_filter,
+            limit=take_count,
+        )
         return result
     except OverseerrError as e:
         raise ToolError(f"Failed to get user requests: {str(e)}")

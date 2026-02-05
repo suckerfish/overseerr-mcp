@@ -84,7 +84,7 @@ docker run -d \
 | `get_media_status` | Check detailed availability status for a specific TMDB ID. Shows request status, media availability, and season count for TV. |
 | `get_requests` | List media requests with user info. Filter by `status` (pending/approved), `media_status` (available/processing/unavailable/failed), or `days`. Use `show_all=true` to get all matches instead of the default 20. |
 | `get_users` | List all Overseerr users with request counts. |
-| `get_user_requests` | Get all requests for a specific user by ID. |
+| `get_user_requests` | Get requests for a specific user. Filter by `media_status` (processing/available/etc). Default 20 results, use `show_all=true` for all. |
 | `request_media` | Request media with preview confirmation. Shows title, overview, genres, rating before confirming. TV shows require season selection. |
 | `health_check` | Check Overseerr server connectivity and version. |
 
