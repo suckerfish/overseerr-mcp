@@ -190,8 +190,9 @@ class OverseerrClient:
                 if req_time < since_time:
                     continue
 
-            # Try to get media title
+            # Try to get media title and availability status
             title = "Unknown"
+            media_status = "Unknown"
             if req.media and req.media.tmdbId:
                 try:
                     if req.type == MediaType.MOVIE:
@@ -200,6 +201,14 @@ class OverseerrClient:
                     else:
                         media_data = await self._request("GET", f"/tv/{req.media.tmdbId}")
                         title = media_data.get("name", "Unknown TV Show")
+
+                    # Extract availability status
+                    media_info = media_data.get("mediaInfo", {})
+                    status_code = media_info.get("status", 1)
+                    try:
+                        media_status = get_media_status_text(MediaStatus(status_code))
+                    except ValueError:
+                        media_status = "Unknown"
                 except OverseerrError:
                     pass
 
@@ -207,7 +216,8 @@ class OverseerrClient:
                 "id": req.id,
                 "title": title,
                 "type": req.type.value,
-                "status": req.status_text,
+                "request_status": req.status_text,
+                "media_status": media_status,
                 "requested_by": req.requester_name,
                 "requested_at": req.createdAt.isoformat(),
                 "user_id": req.requestedBy.id if req.requestedBy else None,
@@ -227,6 +237,7 @@ class OverseerrClient:
         enriched = []
         for req in user_requests:
             title = "Unknown"
+            media_status = "Unknown"
             if req.media and req.media.tmdbId:
                 try:
                     if req.type == MediaType.MOVIE:
@@ -235,6 +246,14 @@ class OverseerrClient:
                     else:
                         media_data = await self._request("GET", f"/tv/{req.media.tmdbId}")
                         title = media_data.get("name", "Unknown TV Show")
+
+                    # Extract availability status
+                    media_info = media_data.get("mediaInfo", {})
+                    status_code = media_info.get("status", 1)
+                    try:
+                        media_status = get_media_status_text(MediaStatus(status_code))
+                    except ValueError:
+                        media_status = "Unknown"
                 except OverseerrError:
                     pass
 
@@ -242,7 +261,8 @@ class OverseerrClient:
                 "id": req.id,
                 "title": title,
                 "type": req.type.value,
-                "status": req.status_text,
+                "request_status": req.status_text,
+                "media_status": media_status,
                 "requested_at": req.createdAt.isoformat(),
             })
 
