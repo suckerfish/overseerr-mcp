@@ -94,6 +94,7 @@ async def search_media(
 @mcp.tool()
 async def get_requests(
     status: Optional[str] = None,
+    media_status: Optional[str] = None,
     days: Optional[int] = None,
     limit: int = 50,
 ) -> dict:
@@ -103,12 +104,13 @@ async def get_requests(
     Perfect for queries like "list all requests from the last week and who requested them".
 
     Args:
-        status: Optional filter - "pending", "approved", or "declined"
+        status: Filter by request approval status - "pending", "approved", or "declined"
+        media_status: Filter by availability - "available", "processing", "partially_available", "requested", or "not_requested"
         days: Optional - only show requests from the last N days
         limit: Maximum number of requests to return (default 50)
 
     Returns:
-        List of requests with titles, requesters, and timestamps
+        List of requests with titles, requesters, request status, and media availability
     """
     try:
         client = get_client()
@@ -132,9 +134,23 @@ async def get_requests(
             take=limit,
         )
 
+        # Client-side filter by media availability status
+        if media_status:
+            media_status_map = {
+                "available": "Available",
+                "processing": "Processing",
+                "partially_available": "Partially Available",
+                "requested": "Requested",
+                "not_requested": "Not Requested",
+            }
+            target_status = media_status_map.get(media_status.lower())
+            if target_status:
+                requests = [r for r in requests if r.get("media_status") == target_status]
+
         return {
             "filter": {
                 "status": status,
+                "media_status": media_status,
                 "days": days,
             },
             "count": len(requests),
