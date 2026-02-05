@@ -8,7 +8,7 @@ MCP server for [Overseerr](https://overseerr.dev/) media request management. Ena
 - **Media status** - Check if content is available, processing, or needs to be requested
 - **View requests** - List requests with user info, filter by approval status, availability status, or time period
 - **User management** - List users and view individual request histories
-- **Request media** - Submit new requests with preview confirmation and per-season selection for TV shows
+- **Request media** - Submit new requests with per-season selection for TV shows
 - **User correlation** - Easily answer questions like "list all requests from the last week and who requested them"
 
 ## Requirements
@@ -85,7 +85,7 @@ docker run -d \
 | `get_requests` | List media requests with user info. Filter by `status` (pending/approved), `media_status` (available/processing/unavailable/failed), or `days`. Use `show_all=true` to get all matches instead of the default 20. |
 | `get_users` | List all Overseerr users with request counts. |
 | `get_user_requests` | Get requests for a specific user. Filter by `media_status` (processing/available/etc). Default 20 results, use `show_all=true` for all. |
-| `request_media` | Request media with preview confirmation. Shows title, overview, genres, rating before confirming. TV shows require season selection. |
+| `request_media` | Request a movie or TV show. TV shows require season selection for multi-season shows. |
 | `health_check` | Check Overseerr server connectivity and version. |
 
 ## Example Queries
@@ -98,7 +98,7 @@ Once connected to an MCP client, you can ask:
 - "Show me all pending requests"
 - "What requests are still processing?" - filters by media availability
 - "What has user ID 5 requested?"
-- "Request the movie The Matrix" - shows preview, requires confirmation
+- "Request the movie The Matrix"
 - "Request seasons 1-3 of Breaking Bad" - per-season TV requests
 
 ## MCP Client Configuration
