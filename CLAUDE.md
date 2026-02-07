@@ -18,9 +18,11 @@ Overseerr MCP server - provides media request management capabilities via the Mo
 src/
 ├── server.py              # FastMCP server, tool definitions
 ├── models/
-│   └── overseerr.py       # Pydantic models for API responses
+│   ├── overseerr.py       # Pydantic models for Overseerr API responses
+│   └── plex.py            # Pydantic models for Plex API responses
 └── tools/
-    └── overseerr_client.py # Async Overseerr API client
+    ├── overseerr_client.py # Async Overseerr API client
+    └── plex_client.py      # Async Plex Media Server API client (optional)
 ```
 
 ## Key Patterns
@@ -50,10 +52,19 @@ except OverseerrError as e:
 
 ## API Notes
 
+### Overseerr
 - Overseerr requires URL encoding for search queries with spaces
 - API key must be the admin key from Settings → General (not user-level keys)
 - The API key is used verbatim (not base64 decoded)
 - Datetime comparisons need timezone handling (API returns timezone-aware)
+
+### Plex (optional)
+- Plex integration is optional — server works without PLEX_URL/PLEX_TOKEN
+- Uses `Accept: application/json` header to get JSON instead of XML
+- Auth via `X-Plex-Token` header
+- Library search uses `/library/sections/{key}/all?title={query}` for substring matching
+- Plex uses `"show"` type internally; we normalize to `"tv"` for consistency
+- Library sections are cached for the client lifetime (they rarely change)
 
 ## Running Tests
 
@@ -77,10 +88,15 @@ asyncio.run(test())
 
 ## Common Tasks
 
-### Add a new tool
+### Add a new Overseerr tool
 1. Add method to `src/tools/overseerr_client.py`
 2. Add Pydantic models if needed in `src/models/overseerr.py`
 3. Register tool in `src/server.py` with `@mcp.tool()` decorator
+
+### Add a new Plex tool
+1. Add method to `src/tools/plex_client.py`
+2. Add Pydantic models if needed in `src/models/plex.py`
+3. Register tool in `src/server.py` — use `get_plex_client()` which returns `None` if unconfigured
 
 ### Update dependencies
 ```bash

@@ -13,6 +13,7 @@ from fastmcp.exceptions import ToolError
 
 from .models.overseerr import MediaType, RequestStatus
 from .tools.overseerr_client import OverseerrClient, OverseerrError
+from .tools.plex_client import PlexClient, PlexError
 
 load_dotenv()
 
@@ -26,8 +27,10 @@ logger = logging.getLogger(__name__)
 # Initialize MCP server
 mcp = FastMCP("overseerr-mcp")
 
-# Global client instance
+# Global client instances
 _client: Optional[OverseerrClient] = None
+_plex_client: Optional[PlexClient] = None
+_plex_unavailable: bool = False
 
 
 def get_client() -> OverseerrClient:
@@ -41,12 +44,29 @@ def get_client() -> OverseerrClient:
     return _client
 
 
+def get_plex_client() -> Optional[PlexClient]:
+    """Get or create the Plex client. Returns None if not configured."""
+    global _plex_client, _plex_unavailable
+    if _plex_unavailable:
+        return None
+    if _plex_client is None:
+        try:
+            _plex_client = PlexClient()
+        except PlexError:
+            _plex_unavailable = True
+            return None
+    return _plex_client
+
+
 @mcp.tool()
 async def search_media(
     query: str,
     media_type: Optional[str] = None,
 ) -> dict:
     """Search for movies and TV shows in Overseerr.
+
+    This searches TMDB (external database), not your Plex library.
+    To search content you already own, use search_library instead.
 
     Use this to find media by title before making a request.
     Returns TMDB IDs needed for requesting media.
@@ -87,6 +107,56 @@ async def search_media(
         }
     except OverseerrError as e:
         raise ToolError(f"Search failed: {str(e)}")
+    except Exception as e:
+        raise ToolError(f"Unexpected error: {str(e)}")
+
+
+@mcp.tool()
+async def search_library(
+    query: str,
+    media_type: Optional[str] = None,
+) -> dict:
+    """Search your Plex library for movies and TV shows you already have.
+
+    Use this when a user asks what's in their library or wants to find content
+    they already own. This searches by title substring within Plex, so "dracula"
+    will match "Bram Stoker's Dracula".
+
+    To search for new content to request, use search_media instead.
+
+    Args:
+        query: Title to search for (substring match)
+        media_type: Optional filter - "movie" or "tv"
+
+    Returns:
+        List of matching items from your Plex library with title, year, rating, and type
+    """
+    plex = get_plex_client()
+    if plex is None:
+        raise ToolError(
+            "Plex is not configured. Set PLEX_URL and PLEX_TOKEN environment variables."
+        )
+
+    try:
+        results = await plex.search_library(query, media_type=media_type)
+
+        return {
+            "query": query,
+            "count": len(results),
+            "results": [
+                {
+                    "title": r.title,
+                    "year": r.year,
+                    "type": r.media_type,
+                    "rating": round(r.rating, 1) if r.rating else None,
+                    "content_rating": r.content_rating,
+                    "summary": (r.summary[:200] + "...") if r.summary and len(r.summary) > 200 else r.summary,
+                }
+                for r in results
+            ],
+        }
+    except PlexError as e:
+        raise ToolError(f"Plex search failed: {str(e)}")
     except Exception as e:
         raise ToolError(f"Unexpected error: {str(e)}")
 
@@ -343,27 +413,41 @@ async def health_check() -> dict:
     Returns:
         Server status and version information
     """
+    result = {}
+
+    # Check Overseerr
     try:
         client = get_client()
         status = await client.get_status()
-
-        return {
-            "status": "healthy",
-            "overseerr": {
-                "version": status.get("version"),
-                "update_available": status.get("updateAvailable", False),
-            },
+        result["status"] = "healthy"
+        result["overseerr"] = {
+            "version": status.get("version"),
+            "update_available": status.get("updateAvailable", False),
         }
     except OverseerrError as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-        }
+        result["status"] = "unhealthy"
+        result["overseerr"] = {"error": str(e)}
     except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-        }
+        result["status"] = "error"
+        result["overseerr"] = {"error": str(e)}
+
+    # Check Plex (optional)
+    plex = get_plex_client()
+    if plex is None:
+        result["plex"] = {"status": "not configured"}
+    else:
+        try:
+            plex_status = await plex.get_status()
+            result["plex"] = {
+                "status": "connected",
+                "version": plex_status.get("version"),
+            }
+        except PlexError as e:
+            result["plex"] = {"status": "error", "error": str(e)}
+        except Exception as e:
+            result["plex"] = {"status": "error", "error": str(e)}
+
+    return result
 
 
 @mcp.tool()

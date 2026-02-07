@@ -5,6 +5,8 @@ services:
     environment:
       - OVERSEERR_URL=${OVERSEERR_URL}
       - OVERSEERR_API_KEY=${OVERSEERR_API_KEY}
+      - PLEX_URL=${PLEX_URL:-}
+      - PLEX_TOKEN=${PLEX_TOKEN:-}
       - PORT=${PORT:-8080}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
