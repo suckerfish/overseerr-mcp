@@ -9,7 +9,6 @@ from urllib.parse import quote
 
 from ..models.overseerr import (
     MediaType,
-    RequestStatus,
     MediaStatus,
     MediaSearchResult,
     MediaRequest,
@@ -164,8 +163,9 @@ class OverseerrClient:
             "take": take,
             "skip": skip,
             "sort": sort_by,
-            "filter": filter_by or "all",
         }
+        if filter_by:
+            params["filter"] = filter_by
 
         data = await self._request("GET", "/request", params=params)
 

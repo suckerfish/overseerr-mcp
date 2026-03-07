@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from .models.overseerr import MediaType, RequestStatus
+from .models.overseerr import MediaType
 from .tools.overseerr_client import OverseerrClient, OverseerrError
 from .tools.plex_client import PlexClient, PlexError
 

@@ -97,10 +97,17 @@ class MediaInfo(BaseModel):
     mediaType: Optional[MediaType] = None
 
 
+REQUEST_STATUS_TEXT = {
+    1: "Pending",
+    2: "Approved",
+    3: "Declined",
+}
+
+
 class MediaRequest(BaseModel):
     """A media request with user information."""
     id: int
-    status: RequestStatus
+    status: int
     createdAt: datetime
     updatedAt: Optional[datetime] = None
     type: MediaType
@@ -127,12 +134,7 @@ class MediaRequest(BaseModel):
     @property
     def status_text(self) -> str:
         """Get human-readable status."""
-        status_map = {
-            RequestStatus.PENDING: "Pending",
-            RequestStatus.APPROVED: "Approved",
-            RequestStatus.DECLINED: "Declined",
-        }
-        return status_map.get(self.status, "Unknown")
+        return REQUEST_STATUS_TEXT.get(self.status, "Unknown")
 
 
 class RequestsResponse(BaseModel):

@@ -2,7 +2,6 @@
 
 from .overseerr import (
     MediaType,
-    RequestStatus,
     MediaSearchResult,
     MediaRequest,
     RequestResponse,
@@ -10,7 +9,6 @@ from .overseerr import (
 
 __all__ = [
     "MediaType",
-    "RequestStatus",
     "MediaSearchResult",
     "MediaRequest",
     "RequestResponse",
