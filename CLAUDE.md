@@ -57,6 +57,7 @@ except OverseerrError as e:
 - API key must be the admin key from Settings → General (not user-level keys)
 - The API key is used verbatim (not base64 decoded)
 - Datetime comparisons need timezone handling (API returns timezone-aware)
+- The API returns undocumented request status codes (e.g. 5) beyond the spec's 1-3. `MediaRequest.status` uses `int` instead of a strict enum to avoid silently dropping requests with unrecognized codes. Avoid strict enums on fields parsed from API responses — use plain types with lookup maps for display text.
 
 ### Plex (optional)
 - Plex integration is optional — server works without PLEX_URL/PLEX_TOKEN
