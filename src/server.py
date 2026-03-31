@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from .models.overseerr import MediaType
+from .models.overseerr import MediaType, ISSUE_TYPE_TEXT, ISSUE_STATUS_TEXT
 from .tools.overseerr_client import OverseerrClient, OverseerrError
 from .tools.plex_client import PlexClient, PlexError
 
@@ -483,6 +483,179 @@ async def get_media_status(
         raise ToolError(f"Status check failed: {str(e)}")
     except ValueError as e:
         raise ToolError(f"Invalid input: {str(e)}")
+    except Exception as e:
+        raise ToolError(f"Unexpected error: {str(e)}")
+
+
+@mcp.tool()
+async def get_issues(
+    filter: Optional[str] = None,
+    limit: int = 20,
+    sort: Optional[str] = None,
+) -> dict:
+    """Get Overseerr issues (reports of problems with media).
+
+    Args:
+        filter: "all", "open", or "resolved" (defaults to open)
+        limit: Maximum number of issues to return (default 20)
+        sort: "added" or "modified" (default added)
+
+    Returns:
+        List of issues with type, status, reporter, and associated media
+    """
+    try:
+        client = get_client()
+        issues = await client.get_issues(
+            filter_by=filter,
+            take=limit,
+            sort_by=sort or "added",
+        )
+
+        # Resolve media titles
+        enriched = []
+        for issue in issues:
+            title = "Unknown"
+            if issue.media and issue.media.tmdbId:
+                try:
+                    media_type = issue.media.mediaType
+                    if media_type == MediaType.MOVIE:
+                        data = await client._request("GET", f"/movie/{issue.media.tmdbId}")
+                        title = data.get("title", "Unknown Movie")
+                    elif media_type == MediaType.TV:
+                        data = await client._request("GET", f"/tv/{issue.media.tmdbId}")
+                        title = data.get("name", "Unknown TV Show")
+                except OverseerrError:
+                    pass
+
+            enriched.append({
+                "id": issue.id,
+                "issue_type": issue.issue_type_text,
+                "status": issue.status_text,
+                "message": issue.message,
+                "media_title": title,
+                "media_type": issue.media.mediaType.value if issue.media and issue.media.mediaType else None,
+                "created_by": issue.createdBy.name if issue.createdBy else "Unknown",
+                "created_at": issue.createdAt.isoformat() if issue.createdAt else None,
+                "comment_count": len(issue.comments),
+            })
+
+        return {
+            "filter": filter or "open",
+            "count": len(enriched),
+            "issues": enriched,
+        }
+    except OverseerrError as e:
+        raise ToolError(f"Failed to get issues: {str(e)}")
+    except Exception as e:
+        raise ToolError(f"Unexpected error: {str(e)}")
+
+
+@mcp.tool()
+async def get_issue(issue_id: int) -> dict:
+    """Get a single issue with its comments.
+
+    Args:
+        issue_id: The issue ID
+
+    Returns:
+        Issue details including all comments
+    """
+    try:
+        client = get_client()
+        issue = await client.get_issue(issue_id)
+
+        # Resolve media title
+        title = "Unknown"
+        if issue.media and issue.media.tmdbId:
+            try:
+                media_type = issue.media.mediaType
+                if media_type == MediaType.MOVIE:
+                    data = await client._request("GET", f"/movie/{issue.media.tmdbId}")
+                    title = data.get("title", "Unknown Movie")
+                elif media_type == MediaType.TV:
+                    data = await client._request("GET", f"/tv/{issue.media.tmdbId}")
+                    title = data.get("name", "Unknown TV Show")
+            except OverseerrError:
+                pass
+
+        return {
+            "id": issue.id,
+            "issue_type": issue.issue_type_text,
+            "status": issue.status_text,
+            "message": issue.message,
+            "media_title": title,
+            "media_type": issue.media.mediaType.value if issue.media and issue.media.mediaType else None,
+            "created_by": issue.createdBy.name if issue.createdBy else "Unknown",
+            "created_at": issue.createdAt.isoformat() if issue.createdAt else None,
+            "updated_at": issue.updatedAt.isoformat() if issue.updatedAt else None,
+            "comments": [
+                {
+                    "id": c.id,
+                    "message": c.message,
+                    "user": c.user.name if c.user else "Unknown",
+                    "created_at": c.createdAt.isoformat() if c.createdAt else None,
+                }
+                for c in issue.comments
+            ],
+        }
+    except OverseerrError as e:
+        raise ToolError(f"Failed to get issue: {str(e)}")
+    except Exception as e:
+        raise ToolError(f"Unexpected error: {str(e)}")
+
+
+@mcp.tool()
+async def update_issue_status(issue_id: int, status: str) -> dict:
+    """Update an issue's status (open or resolve it).
+
+    Args:
+        issue_id: The issue ID
+        status: "open" or "resolved"
+
+    Returns:
+        Updated issue details
+    """
+    try:
+        if status not in ("open", "resolved"):
+            raise ToolError("Status must be 'open' or 'resolved'")
+
+        client = get_client()
+        issue = await client.update_issue_status(issue_id, status)
+
+        return {
+            "id": issue.id,
+            "status": issue.status_text,
+            "message": f"Issue {issue_id} status updated to {status}",
+        }
+    except OverseerrError as e:
+        raise ToolError(f"Failed to update issue: {str(e)}")
+    except Exception as e:
+        raise ToolError(f"Unexpected error: {str(e)}")
+
+
+@mcp.tool()
+async def add_issue_comment(issue_id: int, message: str) -> dict:
+    """Add a comment to an issue.
+
+    Args:
+        issue_id: The issue ID
+        message: The comment text
+
+    Returns:
+        The created comment
+    """
+    try:
+        client = get_client()
+        comment = await client.add_issue_comment(issue_id, message)
+
+        return {
+            "id": comment.id,
+            "message": comment.message,
+            "user": comment.user.name if comment.user else "Unknown",
+            "created_at": comment.createdAt.isoformat() if comment.createdAt else None,
+        }
+    except OverseerrError as e:
+        raise ToolError(f"Failed to add comment: {str(e)}")
     except Exception as e:
         raise ToolError(f"Unexpected error: {str(e)}")
 

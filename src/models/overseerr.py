@@ -151,3 +151,46 @@ class RequestResponse(BaseModel):
     type: MediaType
     media: Optional[MediaInfo] = None
     requestedBy: Optional[UserInfo] = None
+
+
+ISSUE_TYPE_TEXT = {
+    1: "Video",
+    2: "Audio",
+    3: "Subtitle",
+    4: "Other",
+}
+
+ISSUE_STATUS_TEXT = {
+    1: "Open",
+    2: "Resolved",
+}
+
+
+class IssueComment(BaseModel):
+    """A comment on an issue."""
+    id: int
+    message: str
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    user: Optional[UserInfo] = None
+
+
+class Issue(BaseModel):
+    """An Overseerr issue report."""
+    id: int
+    issueType: int
+    status: int
+    message: Optional[str] = None
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+    createdBy: Optional[UserInfo] = None
+    media: Optional[MediaInfo] = None
+    comments: list[IssueComment] = []
+
+    @property
+    def issue_type_text(self) -> str:
+        return ISSUE_TYPE_TEXT.get(self.issueType, "Unknown")
+
+    @property
+    def status_text(self) -> str:
+        return ISSUE_STATUS_TEXT.get(self.status, "Unknown")

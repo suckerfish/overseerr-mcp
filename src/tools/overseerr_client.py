@@ -14,6 +14,8 @@ from ..models.overseerr import (
     MediaRequest,
     UserInfo,
     RequestResponse,
+    Issue,
+    IssueComment,
     get_media_status_text,
 )
 
@@ -360,6 +362,57 @@ class OverseerrClient:
     async def get_tv_details(self, tmdb_id: int) -> dict:
         """Get TV show details by TMDB ID."""
         return await self._request("GET", f"/tv/{tmdb_id}")
+
+    async def get_issues(
+        self,
+        filter_by: Optional[str] = None,
+        take: int = 50,
+        skip: int = 0,
+        sort_by: str = "added",
+    ) -> list[Issue]:
+        """Get issues with optional filtering.
+
+        Args:
+            filter_by: "all", "open", or "resolved" (defaults to open on API side)
+            take: Number of results to return
+            skip: Number of results to skip
+            sort_by: "added" or "modified"
+        """
+        params = {"take": take, "skip": skip, "sort": sort_by}
+        if filter_by:
+            params["filter"] = filter_by
+
+        data = await self._request("GET", "/issue", params=params)
+
+        results = []
+        for item in data.get("results", []):
+            try:
+                results.append(Issue(**item))
+            except ValidationError:
+                continue
+        return results
+
+    async def get_issue(self, issue_id: int) -> Issue:
+        """Get a single issue by ID (includes comments)."""
+        data = await self._request("GET", f"/issue/{issue_id}")
+        return Issue(**data)
+
+    async def update_issue_status(self, issue_id: int, status: str) -> Issue:
+        """Update an issue's status.
+
+        Args:
+            issue_id: The issue ID
+            status: "open" or "resolved"
+        """
+        data = await self._request("POST", f"/issue/{issue_id}/{status}")
+        return Issue(**data)
+
+    async def add_issue_comment(self, issue_id: int, message: str) -> IssueComment:
+        """Add a comment to an issue."""
+        data = await self._request(
+            "POST", f"/issue/{issue_id}/comment", json={"message": message}
+        )
+        return IssueComment(**data)
 
     async def get_media_status(
         self,
