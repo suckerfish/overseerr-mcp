@@ -646,14 +646,22 @@ async def add_issue_comment(issue_id: int, message: str) -> dict:
     """
     try:
         client = get_client()
-        comment = await client.add_issue_comment(issue_id, message)
+        issue = await client.add_issue_comment(issue_id, message)
 
-        return {
-            "id": comment.id,
-            "message": comment.message,
-            "user": comment.user.name if comment.user else "Unknown",
-            "created_at": comment.createdAt.isoformat() if comment.createdAt else None,
+        # Return the newest comment from the updated issue
+        new_comment = issue.comments[-1] if issue.comments else None
+        result = {
+            "issue_id": issue.id,
+            "comment_count": len(issue.comments),
         }
+        if new_comment:
+            result["comment"] = {
+                "id": new_comment.id,
+                "message": new_comment.message,
+                "user": new_comment.user.name if new_comment.user else "Unknown",
+                "created_at": new_comment.createdAt.isoformat() if new_comment.createdAt else None,
+            }
+        return result
     except OverseerrError as e:
         raise ToolError(f"Failed to add comment: {str(e)}")
     except Exception as e:

@@ -407,12 +407,12 @@ class OverseerrClient:
         data = await self._request("POST", f"/issue/{issue_id}/{status}")
         return Issue(**data)
 
-    async def add_issue_comment(self, issue_id: int, message: str) -> IssueComment:
-        """Add a comment to an issue."""
+    async def add_issue_comment(self, issue_id: int, message: str) -> Issue:
+        """Add a comment to an issue. Returns the updated issue."""
         data = await self._request(
             "POST", f"/issue/{issue_id}/comment", json={"message": message}
         )
-        return IssueComment(**data)
+        return Issue(**data)
 
     async def get_media_status(
         self,

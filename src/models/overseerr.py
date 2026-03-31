@@ -168,10 +168,14 @@ ISSUE_STATUS_TEXT = {
 
 class IssueComment(BaseModel):
     """A comment on an issue."""
+    model_config = ConfigDict(populate_by_name=True)
+
     id: int
     message: str
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
+    issueId: Optional[int] = None
+    userId: Optional[int] = None
     user: Optional[UserInfo] = None
 
 
