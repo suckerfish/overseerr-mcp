@@ -11,10 +11,10 @@ services:
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
-      - "${BIND_IP:-0.0.0.0}:${PORT:-8080}:8080"
+      - "${BIND_IP:-0.0.0.0}:${HOST_PORT:-8080}:${PORT:-8080}"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "-X", "POST", "-H", "Content-Type: application/json", "-H", "Accept: application/json, text/event-stream", "-d", "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0\"}}}", "http://localhost:8080/mcp"]
+      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "-X", "POST", "-H", "Content-Type: application/json", "-H", "Accept: application/json, text/event-stream", "-d", "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0\"}}}", "http://localhost:${PORT:-8080}/mcp"]
       interval: 30s
       timeout: 10s
       start_period: 10s
